@@ -12,18 +12,30 @@ class Model(nn.Module):
     def __init__(self, args):
         super(Model, self).__init__()
 
-        self.grammars = symbolics.rule_map[args.symbolic_lib]
-        self.nt_nodes = symbolics.ntn_map[args.symbolic_lib]
-        self.max_len = args.max_len
-        self.max_module_init = args.max_module_init
-        self.num_transplant = args.num_transplant
-        self.num_runs = args.num_runs
-        self.eta = args.eta
-        self.num_aug = args.num_aug
+        # Extract the properties from args
+        properties = [
+            'symbolic_lib',
+            'max_len',
+            'max_module_init',
+            'num_transplant',
+            'num_runs',
+            'eta',
+            'num_aug',
+            'exploration_rate',
+            'transplant_step',
+            'norm_threshold'
+        ]
+
+        for prop in properties:
+            if hasattr(args, prop):
+                setattr(self, prop, getattr(args, prop))
+            else:
+                raise ValueError(f'args does not have property {prop}')
+
+        # Other initializations
+        self.grammars = symbolics.rule_map[self.symbolic_lib]
+        self.nt_nodes = symbolics.ntn_map[self.symbolic_lib]
         self.score_with_est = score.score_with_est
-        self.exploration_rate = args.exploration_rate
-        self.transplant_step = args.transplant_step
-        self.norm_threshold = args.norm_threshold
 
     def forward(self, X, y):
 
@@ -96,7 +108,8 @@ class Model(nn.Module):
                 exploration_rate *= 5
 
                 # 检查是否发现了解决方案。如果是，提前停止。
-                test_score = self.score_with_est(score.simplify_eq(best_solution[0]), 0, supervision_data, eta=self.eta)[0]
+                test_score = \
+                self.score_with_est(score.simplify_eq(best_solution[0]), 0, supervision_data, eta=self.eta)[0]
                 if test_score >= 1 - self.norm_threshold:
                     num_success += 1
                     if discovery_time == 0:
