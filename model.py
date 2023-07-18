@@ -109,7 +109,7 @@ class Model(nn.Module):
 
                 # 检查是否发现了解决方案。如果是，提前停止。
                 test_score = \
-                self.score_with_est(score.simplify_eq(best_solution[0]), 0, supervision_data, eta=self.eta)[0]
+                    self.score_with_est(score.simplify_eq(best_solution[0]), 0, supervision_data, eta=self.eta)[0]
                 if test_score >= 1 - self.norm_threshold:
                     num_success += 1
                     if discovery_time == 0:
