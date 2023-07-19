@@ -3,6 +3,8 @@ from collections import defaultdict
 
 import numpy as np
 
+from policy_value_net import Net
+
 
 class MCTSBlock():
     def __init__(self, data_sample, base_grammars, aug_grammars, nt_nodes, max_len, max_module, aug_grammars_allowed,
@@ -27,6 +29,8 @@ class MCTSBlock():
             lambda: np.zeros(2))  # 初始化一个默认字典，每个键的默认值是一个长度为2的零数组。数组的第一个元素可能表示状态的质量（Q），数组的第二个元素可能表示状态的访问次数（N）。
         self.scale = 0
         self.eta = eta
+
+        self.policy_value_net = Net()
 
     def valid_prods(self, Node):
         """
@@ -297,20 +301,22 @@ class MCTSBlock():
         return policy_fn
         # 返回内嵌的策略函数policy_fn。
 
-    def get_policy2(self, nA):
+    def get_policy2(self, nA, X, state):
         """
         Creates an random policy to select an unvisited child.（均匀分布）
         """
 
-        def policy_fn(UC):
-            if len(UC) != len(set(UC)):
-                print(UC)
-                print(self.grammars)
-            A = np.zeros(nA, dtype=float)
-            A[UC] += float(1 / len(UC))
-            return A
+    #     def policy_fn(UC):
+    #         if len(UC) != len(set(UC)):
+    #             print(UC)
+    #             print(self.grammars)
+    #         A = np.zeros(nA, dtype=float)
+    #         A[UC] += float(1 / len(UC))
+    #         return A
+    #
+    # return policy_fn
 
-        return policy_fn
+        return self.policy_value_net(X, state)
 
     def update_modules(self, state, reward, eq):
         """
@@ -329,7 +335,7 @@ class MCTSBlock():
                     if reward > self.good_modules[0][1]:
                         self.good_modules = sorted(self.good_modules[1:] + [(module, reward, eq)], key=lambda x: x[1])
 
-    def run(self, num_episodes, num_play=50, print_flag=False, print_freq=100):
+    def run(self, X, num_episodes, num_play=50, print_flag=False, print_freq=100):
         """
         Monte Carlo Tree Search algorithm
         此方法实现了蒙特卡洛树搜索算法。
@@ -345,7 +351,6 @@ class MCTSBlock():
         # policy1 for fully expanded node and policy2 for not fully expanded node
         # 获取两种策略：对于已完全扩展的节点使用策略1，对于未完全扩展的节点使用策略2
         policy1 = self.get_policy1(nA)
-        policy2 = self.get_policy2(nA)
 
         # 初始化一个用于存储奖励历史的空列表
         reward_his = []
@@ -413,8 +418,8 @@ class MCTSBlock():
             # 如果当前节点还没有被完全扩展（存在未访问的子节点）
             if UC:
                 # 按照策略2选择一个动作
-                policy = policy2(UC)
-                action = np.random.choice(np.arange(nA), p=policy)
+                p = self.get_policy2(nA, X, state)
+                action = np.random.choice(np.arange(nA), p=p)
                 # 执行选定的动作的索引，获得新的状态、非终止节点、奖励、是否完成以及方程
                 next_state, ntn_next, reward, done, eq = self.step(state, action, ntn)
 

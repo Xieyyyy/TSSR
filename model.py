@@ -79,7 +79,7 @@ class Model(nn.Module):
                                        exploration_rate=self.exploration_rate,
                                        eta=self.eta)
 
-                _, current_solution, good_modules = mcts_block.run(self.transplant_step,
+                _, current_solution, good_modules = mcts_block.run(input_data, self.transplant_step,
                                                                    num_play=10,
                                                                    print_flag=True)
 
