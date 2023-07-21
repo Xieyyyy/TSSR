@@ -312,6 +312,10 @@ class MCTSBlock():
 
         return policy_fn
 
+    def get_policy3(self, nA, UC, seq, state, network):
+        policy = network.policy_value(seq, state)
+        return policy
+
     def update_modules(self, state, reward, eq):
         """
         If we pass by a concise solution with high score, we store it as an
@@ -329,7 +333,7 @@ class MCTSBlock():
                     if reward > self.good_modules[0][1]:
                         self.good_modules = sorted(self.good_modules[1:] + [(module, reward, eq)], key=lambda x: x[1])
 
-    def run(self, num_episodes, num_play=50, print_flag=False, print_freq=100):
+    def run(self, seq, num_episodes, policy_value_net, num_play=50, print_flag=False, print_freq=100):
         """
         Monte Carlo Tree Search algorithm
         此方法实现了蒙特卡洛树搜索算法。
@@ -360,7 +364,7 @@ class MCTSBlock():
                 sys.stdout.flush()
 
             # 初始化状态，非终止节点ntn和未访问的节点UC
-            state = 'f->A'
+            state = ['f->A']
             ntn = ['A']
             UC = self.get_unvisited(state, ntn[0])  # unvisited child，获取未访问的节点索引列表
 
@@ -413,7 +417,7 @@ class MCTSBlock():
             # 如果当前节点还没有被完全扩展（存在未访问的子节点）
             if UC:
                 # 按照策略2选择一个动作
-                policy = policy2(UC)
+                policy = self.get_policy3(nA, UC, seq, state, policy_value_net)
                 action = np.random.choice(np.arange(nA), p=policy)
                 # 执行选定的动作的索引，获得新的状态、非终止节点、奖励、是否完成以及方程
                 next_state, ntn_next, reward, done, eq = self.step(state, action, ntn)

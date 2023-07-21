@@ -6,6 +6,7 @@ import torch.nn as nn
 import score
 import symbolics
 from MCTSblock import MCTSBlock
+from policy_value_net import PolicyValueNetContext
 
 
 class Model(nn.Module):
@@ -33,7 +34,9 @@ class Model(nn.Module):
                 raise ValueError(f'args does not have property {prop}')
 
         # Other initializations
-        self.grammars = symbolics.rule_map[self.symbolic_lib]
+        self.base_grammar = symbolics.rule_map[self.symbolic_lib]
+        self.p_v_net_ctx = PolicyValueNetContext(self.base_grammar, self.num_transplant)
+
         self.nt_nodes = symbolics.ntn_map[self.symbolic_lib]
         self.score_with_est = score.score_with_est
 
@@ -69,7 +72,7 @@ class Model(nn.Module):
 
             for i_itr in range(self.num_transplant):
                 mcts_block = MCTSBlock(data_sample=supervision_data,
-                                       base_grammars=self.grammars,
+                                       base_grammars=self.base_grammar,
                                        aug_grammars=aug_grammars,
                                        nt_nodes=self.nt_nodes,
                                        max_len=self.max_len,
@@ -79,7 +82,9 @@ class Model(nn.Module):
                                        exploration_rate=self.exploration_rate,
                                        eta=self.eta)
 
-                _, current_solution, good_modules = mcts_block.run(self.transplant_step,
+                _, current_solution, good_modules = mcts_block.run(input_data,
+                                                                   self.transplant_step,
+                                                                   policy_value_net=self.p_v_net_ctx,
                                                                    num_play=10,
                                                                    print_flag=True)
 
@@ -109,7 +114,7 @@ class Model(nn.Module):
 
                 # 检查是否发现了解决方案。如果是，提前停止。
                 test_score = \
-                self.score_with_est(score.simplify_eq(best_solution[0]), 0, supervision_data, eta=self.eta)[0]
+                    self.score_with_est(score.simplify_eq(best_solution[0]), 0, supervision_data, eta=self.eta)[0]
                 if test_score >= 1 - self.norm_threshold:
                     num_success += 1
                     if discovery_time == 0:
