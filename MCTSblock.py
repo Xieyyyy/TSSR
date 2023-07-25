@@ -364,7 +364,7 @@ class MCTSBlock():
                 sys.stdout.flush()
 
             # 初始化状态，非终止节点ntn和未访问的节点UC
-            state = ['f->A']
+            state = 'f->A'
             ntn = ['A']
             UC = self.get_unvisited(state, ntn[0])  # unvisited child，获取未访问的节点索引列表
 
@@ -417,7 +417,7 @@ class MCTSBlock():
             # 如果当前节点还没有被完全扩展（存在未访问的子节点）
             if UC:
                 # 按照策略2选择一个动作
-                policy = self.get_policy3(nA, UC, seq, state, policy_value_net)
+                policy = self.get_policy3(nA, UC, seq, states, policy_value_net)
                 action = np.random.choice(np.arange(nA), p=policy)
                 # 执行选定的动作的索引，获得新的状态、非终止节点、奖励、是否完成以及方程
                 next_state, ntn_next, reward, done, eq = self.step(state, action, ntn)
