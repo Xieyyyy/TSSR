@@ -402,6 +402,7 @@ class MCTSBlock():
             if UC:
                 # 按照策略2选择一个动作
                 policy = self.get_policy2(nA, UC)
+                # print(len(policy))
                 action = np.random.choice(np.arange(nA), p=policy)
                 # 执行选定的动作的索引，获得新的状态、非终止节点、奖励、是否完成以及方程
                 next_state, ntn_next, reward, done, eq = self.step(state, action, ntn)
