@@ -238,79 +238,68 @@ class MCTSBlock():
             else:
                 state = ''
 
-    def get_policy1(self, nA):
+    def get_policy1(self, nA, state, node):
         """
-        Creates an policy based on ucb score.
+        Creates a policy based on ucb score.
         这两个方法分别创建基于UCB分数的策略和用于选择未访问过的子节点的随机策略。
         这个函数的目的是创建一个基于ucb(上限置信度边界)分数的策略。
         """
 
-        def policy_fn(state, node):
+        valid_action = self.valid_prods(node)
+        # 根据给定的节点，找出所有的有效动作。
 
-            # policy_fn是get_policy1中的一个内嵌函数，它接收状态和节点作为输入。
+        policy_valid = []
+        # 初始化一个空列表，用于存储所有有效动作的ucb分数。
 
-            valid_action = self.valid_prods(node)
-            # 根据给定的节点，找出所有的有效动作。
+        sum_ucb = sum(self.UCBs[state][valid_action])
+        # 计算所有有效动作的ucb分数的总和。
 
-            policy_valid = []
-            # 初始化一个空列表，用于存储所有有效动作的ucb分数。
+        for a in valid_action:
+            # 对于每一个有效动作：
 
-            sum_ucb = sum(self.UCBs[state][valid_action])
-            # 计算所有有效动作的ucb分数的总和。
+            policy_mcts = self.UCBs[state][a] / sum_ucb
+            # 计算这个动作的ucb分数在总分中的比例，并赋值给policy_mcts。
 
-            for a in valid_action:
-                # 对于每一个有效动作：
+            policy_valid.append(policy_mcts)
+            # 将policy_mcts添加到policy_valid列表中。
 
-                policy_mcts = self.UCBs[state][a] / sum_ucb
-                # 计算这个动作的ucb分数在总分中的比例，并赋值给policy_mcts。
+        if len(set(policy_valid)) == 1:
+            # 如果所有的ucb分数都相同：
 
-                policy_valid.append(policy_mcts)
-                # 将policy_mcts添加到policy_valid列表中。
-
-            if len(set(policy_valid)) == 1:
-                # 如果所有的ucb分数都相同：
-
-                A = np.zeros(nA)
-                # 创建一个长度为nA的零向量A。
-
-                A[valid_action] = float(1 / len(valid_action))
-                # 将所有有效动作对应的元素设为均匀概率。
-
-                return A
-                # 返回概率向量A。
-
-            A = np.zeros(nA, dtype=float)
+            A = np.zeros(nA)
             # 创建一个长度为nA的零向量A。
 
-            best_action = valid_action[np.argmax(policy_valid)]
-            # 找出具有最大ucb分数的动作，并赋值给best_action。
-
-            A[best_action] += 0.8
-            # 将最佳动作对应的元素设为0.8。
-
-            A[valid_action] += float(0.2 / len(valid_action))
-            # 将所有有效动作对应的元素平均分配剩余的0.2。
+            A[valid_action] = float(1 / len(valid_action))
+            # 将所有有效动作对应的元素设为均匀概率。
 
             return A
             # 返回概率向量A。
 
-        return policy_fn
-        # 返回内嵌的策略函数policy_fn。
+        A = np.zeros(nA, dtype=float)
+        # 创建一个长度为nA的零向量A。
 
-    def get_policy2(self, nA):
+        best_action = valid_action[np.argmax(policy_valid)]
+        # 找出具有最大ucb分数的动作，并赋值给best_action。
+
+        A[best_action] += 0.8
+        # 将最佳动作对应的元素设为0.8。
+
+        A[valid_action] += float(0.2 / len(valid_action))
+        # 将所有有效动作对应的元素平均分配剩余的0.2。
+
+        return A
+        # 返回概率向量A。
+
+    def get_policy2(self, nA, UC):
         """
-        Creates an random policy to select an unvisited child.（均匀分布）
+        Creates a random policy to select an unvisited child.（均匀分布）
         """
-
-        def policy_fn(UC):
-            if len(UC) != len(set(UC)):
-                print(UC)
-                print(self.grammars)
-            A = np.zeros(nA, dtype=float)
-            A[UC] += float(1 / len(UC))
-            return A
-
-        return policy_fn
+        if len(UC) != len(set(UC)):
+            print(UC)
+            print(self.grammars)
+        A = np.zeros(nA, dtype=float)
+        A[UC] += float(1 / len(UC))
+        return A
 
     def update_modules(self, state, reward, eq):
         """
@@ -344,8 +333,6 @@ class MCTSBlock():
         # The policy we're following:
         # policy1 for fully expanded node and policy2 for not fully expanded node
         # 获取两种策略：对于已完全扩展的节点使用策略1，对于未完全扩展的节点使用策略2
-        policy1 = self.get_policy1(nA)
-        policy2 = self.get_policy2(nA)
 
         # 初始化一个用于存储奖励历史的空列表
         reward_his = []
@@ -370,7 +357,8 @@ class MCTSBlock():
             # 如果当前节点已经被完全扩展（即没有未访问的子节点）
             while not UC:
                 # 按照策略1选择一个动作
-                action = np.random.choice(np.arange(nA), p=policy1(state, ntn[0]))
+                policy = self.get_policy1(nA, state, ntn[0])
+                action = np.random.choice(np.arange(nA), p=policy)
 
                 # 执行选定的动作，获得新的状态、非终止节点、奖励、是否完成以及方程
                 next_state, ntn_next, reward, done, eq = self.step(state, action, ntn)
@@ -413,7 +401,7 @@ class MCTSBlock():
             # 如果当前节点还没有被完全扩展（存在未访问的子节点）
             if UC:
                 # 按照策略2选择一个动作
-                policy = policy2(UC)
+                policy = self.get_policy2(nA, UC)
                 action = np.random.choice(np.arange(nA), p=policy)
                 # 执行选定的动作的索引，获得新的状态、非终止节点、奖励、是否完成以及方程
                 next_state, ntn_next, reward, done, eq = self.step(state, action, ntn)
