@@ -1,7 +1,7 @@
 import time
+from collections import deque
 
 import numpy as np
-import torch.nn as nn
 
 import score
 import symbolics
@@ -9,9 +9,8 @@ from MCTSblock import MCTSBlock
 from policy_value_net import PolicyValueNetContext
 
 
-class Model(nn.Module):
+class Model:
     def __init__(self, args):
-        super(Model, self).__init__()
 
         # Extract the properties from args
         properties = [
@@ -39,22 +38,27 @@ class Model(nn.Module):
 
         self.nt_nodes = symbolics.ntn_map[self.symbolic_lib]
         self.score_with_est = score.score_with_est
+        self.data_buffer = deque(maxlen=1024)
 
-    def forward(self, X, y):
-
-        count_success = True
+    def run(self, X, y=None):
         assert X.size(0) == 1
-        X = X.squeeze(0)
-        y = y.squeeze(0)
+        if y is not None:
+            X = X.squeeze(0)
+            y = y.squeeze(0)
 
-        time_idx = np.arange(X.size(0) + y.shape[0])
-        input_data = np.vstack([time_idx[:X.size(0)], X])
+            time_idx = np.arange(X.size(0) + y.shape[0])
+            input_data = np.vstack([time_idx[:X.size(0)], X])
 
-        supervision_data = np.vstack([time_idx, np.concatenate([X, y])])
+            supervision_data = np.vstack([time_idx, np.concatenate([X, y])])
+        else:
+            X = X.squeeze(0)
+            time_idx = np.arange(X.size(0))
+            input_data = np.vstack([time_idx[:X.size(0)], X])
+            supervision_data = np.vstack([time_idx, X])
 
-        num_success = 0
         all_times = []
         all_eqs = []
+        test_scores = []
 
         module_grow_step = (self.max_len - self.max_module_init) / self.num_transplant
 
@@ -67,8 +71,9 @@ class Model(nn.Module):
             best_modules = []  # 初始化最佳模块
             aug_grammars = []  # 初始化增强语法
 
-            start_time = time.time()  # 记录开始时间
-            discovery_time = 0  # 初始化发现时间
+            start_time = time.time()  # 记录开始时间ß
+
+            self.p_v_net_ctx.reset_grammar_vocab_name()
 
             for i_itr in range(self.num_transplant):
                 mcts_block = MCTSBlock(data_sample=supervision_data,
@@ -82,13 +87,13 @@ class Model(nn.Module):
                                        exploration_rate=self.exploration_rate,
                                        eta=self.eta)
 
-                _, current_solution, good_modules = mcts_block.run(input_data,
-                                                                   self.transplant_step,
-                                                                   policy_value_net=self.p_v_net_ctx,
-                                                                   num_play=10,
-                                                                   print_flag=True)
+                _, current_solution, good_modules, records = mcts_block.run(input_data,
+                                                                            self.transplant_step,
+                                                                            policy_value_net=self.p_v_net_ctx,
+                                                                            num_play=10,
+                                                                            print_flag=True)
 
-                end_time = time.time() - start_time  # 计算运行时间
+                self.data_buffer.extend(list(records)[:])
 
                 # 如果没有最佳模块，则将好的模块赋值给最佳模块
                 if not best_modules:
@@ -115,23 +120,25 @@ class Model(nn.Module):
                 # 检查是否发现了解决方案。如果是，提前停止。
                 test_score = \
                     self.score_with_est(score.simplify_eq(best_solution[0]), 0, supervision_data, eta=self.eta)[0]
-                if test_score >= 1 - self.norm_threshold:
-                    num_success += 1
-                    if discovery_time == 0:
-                        discovery_time = end_time
-                        all_times.append(discovery_time)
-                    break
+                # if test_score >= 1 - self.norm_threshold:
+                #     num_success += 1
+                #     if discovery_time == 0:
+                #         discovery_time = end_time
+                #         all_times.append(discovery_time)
+                #     break
 
             all_eqs.append(score.simplify_eq(best_solution[0]))
+            test_scores.append(test_score)
+
             print('\n{} tests complete after {} iterations.'.format(i_test + 1, i_itr + 1))
             print('best solution: {}'.format(score.simplify_eq(best_solution[0])))
             print('test score: {}'.format(test_score))
             print()
 
         # 计算成功率
-        success_rate = num_success / self.num_runs
-        if count_success:
-            print('success rate :', success_rate)
+        # success_rate = num_success / self.num_runs
+        # if count_success:
+        #     print('success rate :', success_rate)
 
         # 返回所有发现的方程、成功率和运行时间
-        return all_eqs, success_rate, all_times, supervision_data
+        return all_eqs, all_times, test_scores, supervision_data

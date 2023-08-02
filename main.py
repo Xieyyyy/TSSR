@@ -30,7 +30,7 @@ parser.add_argument('--used_dimension', type=int, default=1)
 parser.add_argument('--symbolic_lib', type=str, default="elec_small")
 parser.add_argument('--max_len', type=int, default=20)
 parser.add_argument('--max_module_init', type=int, default=10)
-parser.add_argument('--num_transplant', type=int, default=5)
+parser.add_argument('--num_transplant', type=int, default=2)
 parser.add_argument('--num_runs', type=int, default=5)
 parser.add_argument('--eta', type=float, default=1)
 parser.add_argument('--num_aug', type=int, default=0)
@@ -45,6 +45,7 @@ parser.add_argument("--seq_in", type=int, default=48, help='length of input seq'
 parser.add_argument("--seq_out", type=int, default=48, help='length of output seq')
 parser.add_argument('--target', type=str, default='OT', help='target feature in S or MS task')
 parser.add_argument("--batch_size", type=int, default=1, help='default')
+parser.add_argument("--train_size", type=int, default=64)
 parser.add_argument("--lr", type=float, default=1e-6, help='learning rate')
 parser.add_argument("--dropout", type=float, default=0.5, help='dropout rate')
 parser.add_argument('--weight_decay', type=float, default=0.0001, help='weight decay rate')
@@ -88,8 +89,12 @@ def main():
         train_n_samples = 0
         for iter, (data, _, _, _) in enumerate(train_loader):
             train_data = data[..., args.used_dimension].float()
-            metrics = engine.train(train_data)
-            break
+            all_eqs, all_times, test_data, loss, mae, mse, corr = engine.simulate(train_data)
+            train_loss += loss
+            train_n_samples += 1
+
+            log = 'Iter: {:03d}, Train Loss: {:.4f}, Train MAE: {:.4f}, Train MSE: {:.4f}, Train CORR: {:.4f}'
+            print(log.format(iter, train_loss / train_n_samples, mae, mse, corr), flush=True)
 
 
 if __name__ == '__main__':
