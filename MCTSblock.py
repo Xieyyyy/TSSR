@@ -303,7 +303,7 @@ class MCTSBlock():
 
     def get_policy3(self, nA, UC, seq, state, network):
         policy, value = network.policy_value(seq, state)
-        policy = policy.detach().squeeze(0).numpy()
+        policy = policy.cpu().detach().squeeze(0).numpy()
         policy = self.softmax(policy[:nA])
         return policy, value
 
@@ -421,6 +421,7 @@ class MCTSBlock():
                 if eq is not None:
                     state_records.append(state)
                     seq_records.append(seq)
+                    policy = self.get_policy1(nA, state, ntn[0])
                     policy_records.append(policy)
                     value_records.append(reward)
 

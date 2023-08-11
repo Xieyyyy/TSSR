@@ -7,6 +7,8 @@ import torch
 from data_provider.data_factory import data_provider
 from engine import Engine
 
+from torch.utils.tensorboard import SummaryWriter
+
 parser = argparse.ArgumentParser(description='PyTorch Time series forecasting')
 
 parser.add_argument("--device", type=str, default="cpu")
@@ -31,7 +33,7 @@ parser.add_argument('--symbolic_lib', type=str, default="elec_small")
 parser.add_argument('--max_len', type=int, default=20)
 parser.add_argument('--max_module_init', type=int, default=10)
 parser.add_argument('--num_transplant', type=int, default=2)
-parser.add_argument('--num_runs', type=int, default=5)
+parser.add_argument('--num_runs', type=int, default=1)
 parser.add_argument('--eta', type=float, default=1)
 parser.add_argument('--num_aug', type=int, default=0)
 parser.add_argument('--exploration_rate', type=float, default=1 / np.sqrt(2))
@@ -40,12 +42,13 @@ parser.add_argument('--norm_threshold', type=float, default=1e-5)
 
 # -- training
 parser.add_argument("--seed", type=int, default=42, help='random seed')
-parser.add_argument("--epoch", type=int, default=200, help='epoch')
+parser.add_argument("--epoch", type=int, default=50, help='epoch')
+parser.add_argument("--epoch_train", type=int, default=10, help='epoch')
 parser.add_argument("--seq_in", type=int, default=48, help='length of input seq')
 parser.add_argument("--seq_out", type=int, default=48, help='length of output seq')
 parser.add_argument('--target', type=str, default='OT', help='target feature in S or MS task')
 parser.add_argument("--batch_size", type=int, default=1, help='default')
-parser.add_argument("--train_size", type=int, default=64)
+parser.add_argument("--train_size", type=int, default=128)
 parser.add_argument("--lr", type=float, default=1e-6, help='learning rate')
 parser.add_argument("--dropout", type=float, default=0.5, help='dropout rate')
 parser.add_argument('--weight_decay', type=float, default=0.0001, help='weight decay rate')
@@ -79,6 +82,10 @@ def main():
     vali_data, vali_loader = get_data(args=args, flag='val')
     test_data, test_loader = get_data(args=args, flag='test')
 
+    if args.recording:
+        # record_info(str(args), "./records/" + args.tag)
+        sw = SummaryWriter(comment=args.tag)
+
     engine = Engine(args)
 
     print("start training...")
@@ -87,14 +94,40 @@ def main():
         t1 = time.time()
         train_loss = 0
         train_n_samples = 0
+        train_maes, train_mses, train_corrs, test_maes, test_mses, test_corrs = [], [], [], [], [], []
         for iter, (data, _, _, _) in enumerate(train_loader):
             train_data = data[..., args.used_dimension].float()
             all_eqs, all_times, test_data, loss, mae, mse, corr = engine.simulate(train_data)
+            train_maes.append(mae)
+            train_mses.append(mse)
+            train_corrs.append(corr)
             train_loss += loss
             train_n_samples += 1
 
+
             log = 'Iter: {:03d}, Train Loss: {:.4f}, Train MAE: {:.4f}, Train MSE: {:.4f}, Train CORR: {:.4f}'
             print(log.format(iter, train_loss / train_n_samples, mae, mse, corr), flush=True)
+
+        torch.cuda.empty_cache()
+        print("eval...")
+        for iter, (data, _, _, _) in enumerate(test_loader):
+            train_data = data[..., args.used_dimension].float()
+            mae, mse, corr, all_eqs, test_data = engine.eval(train_data)
+            test_maes.append(mae)
+            test_mses.append(mse)
+            test_corrs.append(corr)
+
+        log = 'Epoch: {:03d}, Train Loss: {:.4f}, Test MAE: {:.4f}, Test MSE: {:.4f}, Test CORR: {:.4f}, ' \
+              'Training Time: {:.4f}/epoch'
+        print(log.format(epoch_num, train_loss / train_n_samples, sum(test_maes) / len(test_maes),
+                         sum(test_mses) / len(test_mses), sum(test_corrs) / len(test_corrs), time.time() - t1),
+              flush=True)
+
+        if args.recording:
+            sw.add_scalar('Loss/train', train_loss / train_n_samples, global_step=epoch_num)
+            sw.add_scalar('MAE/valid', sum(test_maes) / len(test_maes), global_step=epoch_num)
+            sw.add_scalar('MSE/valid', sum(test_mses) / len(test_mses), global_step=epoch_num)
+            sw.add_scalar('RSE/valid', sum(test_corrs) / len(test_corrs), global_step=epoch_num)
 
 
 if __name__ == '__main__':

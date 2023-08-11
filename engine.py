@@ -1,3 +1,4 @@
+import math
 import random
 from collections import defaultdict
 
@@ -16,11 +17,13 @@ class Engine(object):
     def __init__(self, args):
         self.args = args
         self.model = Model(args)
+        self.model.p_v_net_ctx.pv_net = self.model.p_v_net_ctx.pv_net.to(self.args.device)
         self.optimizer = op.Adam(self.model.p_v_net_ctx.pv_net.parameters(), lr=self.args.lr,
                                  weight_decay=self.args.weight_decay)
 
     @staticmethod
     def metrics(exps, scores, data):
+
         best_index = np.argmax(scores)
         best_exp = exps[best_index]
         span, gt = data
@@ -30,7 +33,19 @@ class Engine(object):
         prediction = f(span)
         mae = np.mean(np.abs(prediction - gt))
         mse = np.mean((prediction - gt) ** 2)
-        corr, _ = pearsonr(prediction, gt)
+        try:
+            corr, _ = pearsonr(prediction, gt)
+        except ValueError:
+            if (np.isnan(prediction) | np.isinf(prediction)).any():
+                corr = 0.
+            elif (np.isnan(gt) | np.isinf(gt)).any():
+                valid_indices = np.where(~np.isnan(gt) & ~np.isinf(gt))[0]
+                valid_gt = gt[valid_indices]
+                valid_pred = prediction[valid_indices]
+                corr, _ = pearsonr(valid_pred, valid_gt)
+        except TypeError:
+            if type(prediction) is float:
+                corr = 0.
 
         return mae, mse, corr
 
@@ -45,25 +60,29 @@ class Engine(object):
         return all_eqs, all_times, test_data, 0, mae, mse, corr
 
     def train(self):
-        print("start train neural networks...")
-        self.optimizer.zero_grad()
         self.model.p_v_net_ctx.pv_net.train()
-        state_batch, seq_batch, policy_batch, value_batch, length_indices = self.preprecess_data()
-        value_batch = torch.Tensor(value_batch)
-        raw_dis_out, value_out = self.model.p_v_net_ctx.policy_value_batch(seq_batch, state_batch)
-        total_loss = F.mse_loss(value_out, value_batch)
-        for length, sample_id in length_indices.items():
-            gt_policy = torch.Tensor([policy_batch[i] for i in sample_id])
-            out_policy = F.softmax(torch.stack([raw_dis_out[i] for i in sample_id])[:, :length], dim=-1)
-            dist_target = Categorical(probs=gt_policy)
-            dist_out = Categorical(probs=out_policy)
-            total_loss += torch.distributions.kl_divergence(dist_target, dist_out).mean()
-        total_loss.backward()
-        if self.args.clip is not None:
-            torch.nn.utils.clip_grad_norm_(self.model.p_v_net_ctx.pv_net.parameters(), self.args.clip)
-        self.optimizer.step()
+        print("start train neural networks...")
+        for _ in range(self.args.epoch_train):
+            self.optimizer.zero_grad()
+            state_batch, seq_batch, policy_batch, value_batch, length_indices = self.preprecess_data()
+            value_batch = torch.Tensor(value_batch)
+            raw_dis_out, value_out = self.model.p_v_net_ctx.policy_value_batch(seq_batch, state_batch)
+            value_batch[torch.isnan(value_batch)] = 0.
+            value_loss = F.mse_loss(value_out, value_batch.to(value_out.device))
+            dist_loss = []
+            for length, sample_id in length_indices.items():
+                out_policy = F.softmax(torch.stack([raw_dis_out[i] for i in sample_id])[:, :length], dim=-1)
+                gt_policy = torch.Tensor([policy_batch[i] for i in sample_id]).to(out_policy.device)
+                dist_target = Categorical(probs=gt_policy)
+                dist_out = Categorical(probs=out_policy)
+                dist_loss.append(torch.distributions.kl_divergence(dist_target, dist_out).mean())
+            total_loss = value_loss + sum(dist_loss)
+            total_loss.backward(retain_graph=True)
+            if self.args.clip is not None:
+                torch.nn.utils.clip_grad_norm_(self.model.p_v_net_ctx.pv_net.parameters(), self.args.clip)
+            self.optimizer.step()
         print("end train neural networks...")
-        return total_loss
+        return total_loss / self.args.epoch
 
     def obtain_policy_length(self, policy):
         length_indices = defaultdict(list)
@@ -72,7 +91,11 @@ class Engine(object):
         return dict(length_indices)
 
     def preprecess_data(self):
-        mini_batch = random.sample(self.model.data_buffer, self.args.train_size)
+        non_nan_indices = [index for index, value in enumerate(self.model.data_buffer) if not math.isnan(value[3])]
+        sampled_idx = random.sample(non_nan_indices, min(len(non_nan_indices), self.args.train_size))
+        mini_batch = [self.model.data_buffer[i] for i in sampled_idx]
+
+        # mini_batch = random.sample(self.model.data_buffer, self.args.train_size)
         state_batch = [data[0] for data in mini_batch]
         seq_batch = [data[1][1] for data in mini_batch]
         policy_batch = [data[2] for data in mini_batch]
@@ -84,4 +107,9 @@ class Engine(object):
         self.model.p_v_net_ctx.pv_net.eval()
         X, y = inputs[:, :self.args.seq_in], inputs[:, -self.args.seq_out:]
 
-        all_eqs, all_times, test_data = self.model.run(X, y)
+        all_eqs, all_times, test_scores, test_data = self.model.run(X)
+
+        time_idx = np.arange(inputs.squeeze(0).size(0))
+        inputs = np.vstack([time_idx, inputs])
+        mae, mse, corr = self.metrics(all_eqs, test_scores, inputs)
+        return mae, mse, corr, all_eqs, test_data

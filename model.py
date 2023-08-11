@@ -23,7 +23,8 @@ class Model:
             'num_aug',
             'exploration_rate',
             'transplant_step',
-            'norm_threshold'
+            'norm_threshold',
+            'device'
         ]
 
         for prop in properties:
@@ -34,7 +35,7 @@ class Model:
 
         # Other initializations
         self.base_grammar = symbolics.rule_map[self.symbolic_lib]
-        self.p_v_net_ctx = PolicyValueNetContext(self.base_grammar, self.num_transplant)
+        self.p_v_net_ctx = PolicyValueNetContext(self.base_grammar, self.num_transplant, self.device)
 
         self.nt_nodes = symbolics.ntn_map[self.symbolic_lib]
         self.score_with_est = score.score_with_est

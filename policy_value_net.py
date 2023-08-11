@@ -41,18 +41,20 @@ class PVNet(nn.Module):
 class PolicyValueNetContext:
     """policy-value network context """
 
-    def __init__(self, grammrs, num_transplant):
+    def __init__(self, grammrs, num_transplant, device):
+        self.device = device
         self.grammar_vocab = ['f->A'] + grammrs + ['placeholer' + str(i) for i in
                                                    range(num_transplant)]
         self.grammar_vocab_backend = copy.deepcopy(self.grammar_vocab)
         self.num_transplant = num_transplant
         self.symbol2idx = {symbol: idx for idx, symbol in enumerate(self.grammar_vocab)}
-        self.pv_net = PVNet(self.grammar_vocab, num_transplant)
+        self.pv_net = PVNet(self.grammar_vocab, num_transplant).to(self.device)
 
     def policy_value(self, seq, state):
         state_list = state.split(",")
-        state_idx = torch.Tensor([self.symbol2idx[item] for item in state_list])
-        raw_dist_out, value_out = self.pv_net(torch.Tensor(seq[1, :]).unsqueeze(0), state_idx.unsqueeze(0))
+        state_idx = torch.Tensor([self.symbol2idx[item] for item in state_list]).to(self.device)
+        seq = torch.Tensor(seq).to(self.device)
+        raw_dist_out, value_out = self.pv_net(seq[1, :].unsqueeze(0), state_idx.unsqueeze(0))
         return raw_dist_out, value_out
 
     def process_state(self, state):
@@ -66,13 +68,13 @@ class PolicyValueNetContext:
 
     def policy_value_batch(self, seqs, states):
         for idx, seq in enumerate(seqs):
-            seqs[idx] = torch.Tensor(seq)
+            seqs[idx] = torch.Tensor(seq).to(self.device)
         states_list = []
         for idx, state in enumerate(states):
             state_list = state.split(",")
             processed_state_list = self.process_state(state_list)
 
-            state_idx = torch.Tensor([self.symbol2idx[item] for item in processed_state_list])
+            state_idx = torch.Tensor([self.symbol2idx[item] for item in processed_state_list]).to(self.device)
 
             state_emb = self.pv_net.embedding_table(state_idx.long())
             # states_list.append(F.pad(state_emb, (0, 0, max_len - state_emb.shape[0], 0), "constant", 0))
@@ -82,8 +84,8 @@ class PolicyValueNetContext:
             if state.shape[0] < max_len:
                 states_list[idx] = F.pad(state, (0, 0, 0, max_len - state.shape[0]), "constant", 0)
 
-        states = torch.stack(states_list)
-        seqs = torch.stack(seqs)
+        states = torch.stack(states_list).to(self.device)
+        seqs = torch.stack(seqs).to(self.device)
         raw_dist_out, value_out = self.pv_net(seqs, states, False)
         return raw_dist_out, value_out
 
