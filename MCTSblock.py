@@ -9,9 +9,9 @@ class MCTSBlock():
                  func_score, exploration_rate=1 / np.sqrt(2), eta=0.999):
         self.data_sample = data_sample
         self.base_grammars = base_grammars
+        self.aug_grammars = [x for x in aug_grammars if x not in base_grammars]
 
-        self.grammars = base_grammars + [x for x in aug_grammars if
-                                         x not in base_grammars]
+        self.grammars = base_grammars + self.aug_grammars
 
         self.nt_nodes = nt_nodes
         self.max_len = max_len
@@ -269,6 +269,7 @@ class MCTSBlock():
             A = np.zeros(nA)
             # 创建一个长度为nA的零向量A。
 
+
             A[valid_action] = float(1 / len(valid_action))
             # 将所有有效动作对应的元素设为均匀概率。
 
@@ -301,6 +302,12 @@ class MCTSBlock():
         A[UC] += float(1 / len(UC))
         return A
 
+    def get_policy3(self, nA, UC, seq, state, network):
+        policy, value = network.policy_value(seq, state)
+        policy = policy.cpu().detach().squeeze(0).numpy()
+        policy = self.softmax(policy[:nA])
+        return policy, value
+
     def update_modules(self, state, reward, eq):
         """
         If we pass by a concise solution with high score, we store it as an
@@ -318,13 +325,15 @@ class MCTSBlock():
                     if reward > self.good_modules[0][1]:
                         self.good_modules = sorted(self.good_modules[1:] + [(module, reward, eq)], key=lambda x: x[1])
 
-    def run(self, num_episodes, num_play=50, print_flag=False, print_freq=100):
+    def run(self, seq, num_episodes, policy_value_net, num_play=50, print_flag=False, print_freq=100):
         """
         Monte Carlo Tree Search algorithm
         此方法实现了蒙特卡洛树搜索算法。
         """
         # 获取所有语法（动作）的数量
         nA = len(self.grammars)
+        policy_value_net.update_grammar_vocab_name(self.aug_grammars)
+        # print(policy_value_net.grammar_vocab)
 
         # search history
         # 初始化一个用于存储搜索历史的空列表
@@ -339,6 +348,11 @@ class MCTSBlock():
 
         # 初始化最佳解决方案及其奖励为0
         best_solution = ('nothing', 0)
+
+        state_records = []
+        seq_records = []
+        policy_records = []
+        value_records = []
 
         for i_episode in range(1, num_episodes + 1):
             if (i_episode) % print_freq == 0 and print_flag:
@@ -401,11 +415,17 @@ class MCTSBlock():
             # 如果当前节点还没有被完全扩展（存在未访问的子节点）
             if UC:
                 # 按照策略2选择一个动作
-                policy = self.get_policy2(nA, UC)
-                # print(len(policy))
+
+                policy, value = self.get_policy3(nA, UC, seq, state, policy_value_net)
                 action = np.random.choice(np.arange(nA), p=policy)
                 # 执行选定的动作的索引，获得新的状态、非终止节点、奖励、是否完成以及方程
                 next_state, ntn_next, reward, done, eq = self.step(state, action, ntn)
+                if eq is not None:
+                    state_records.append(state)
+                    seq_records.append(seq)
+                    policy = self.get_policy1(nA, state, ntn[0])
+                    policy_records.append(policy)
+                    value_records.append(reward)
 
                 # 如果新的状态不是终止状态，那么进行num_play次滚动模拟，获取最大的奖励和对应的方程
                 if not done:
@@ -423,4 +443,13 @@ class MCTSBlock():
                 reward_his.append(best_solution[1])
 
         # 返回奖励历史、最佳解和优秀模块
-        return reward_his, best_solution, self.good_modules
+        return reward_his, best_solution, self.good_modules, zip(state_records, seq_records, policy_records,
+                                                                 value_records)
+
+    @staticmethod
+    def softmax(x):
+        """
+        Compute softmax values for each sets of scores in x.
+        """
+        e_x = np.exp(x - np.max(x))
+        return e_x / e_x.sum(axis=0)
