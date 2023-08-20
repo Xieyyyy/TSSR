@@ -269,6 +269,7 @@ class MCTSBlock():
             A = np.zeros(nA)
             # 创建一个长度为nA的零向量A。
 
+
             A[valid_action] = float(1 / len(valid_action))
             # 将所有有效动作对应的元素设为均匀概率。
 
@@ -414,6 +415,7 @@ class MCTSBlock():
             # 如果当前节点还没有被完全扩展（存在未访问的子节点）
             if UC:
                 # 按照策略2选择一个动作
+
                 policy, value = self.get_policy3(nA, UC, seq, state, policy_value_net)
                 action = np.random.choice(np.arange(nA), p=policy)
                 # 执行选定的动作的索引，获得新的状态、非终止节点、奖励、是否完成以及方程
