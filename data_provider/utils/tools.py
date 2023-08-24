@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import time
+from data_provider.data_factory import data_provider
 
 plt.switch_backend('agg')
 
@@ -107,3 +108,15 @@ def test_params_flop(model,x_shape):
         # print('Params:' + params)
         print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
         print('{:<30}  {:<8}'.format('Number of parameters: ', params))
+
+
+
+def group_values(values: np.ndarray, groups: np.ndarray, group_name: str) -> np.ndarray:
+    """
+    Filter values array by group indices and clean it from NaNs.
+    """
+    return np.array([v[~np.isnan(v)] for v in values[groups == group_name]])
+
+def get_data(in_data):
+    data_set, data_loader = data_provider(in_data)
+    return data_set, data_loader
