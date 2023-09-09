@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as op
 from scipy.stats import pearsonr
-from sympy import symbols, lambdify, sympify
+from sympy import symbols
 from torch.distributions import Categorical
 
 from model import Model
@@ -28,8 +28,13 @@ class Engine(object):
         best_exp = exps[best_index]
         span, gt = data
         x = symbols("x")
-        expression = sympify(best_exp)
-        f = lambdify(x, expression, "numpy")
+
+        # Replacing the lambdify function with the new lambda function
+        corrected_expression = best_exp.replace("exp", "np.exp").replace("cos", "np.cos").replace("sin",
+                                                                                                  "np.sin").replace(
+            "sqrt", "np.sqrt").replace("log", "np.log")
+        f = lambda x: eval(corrected_expression)
+
         prediction = f(span)
         mae = np.mean(np.abs(prediction - gt))
         mse = np.mean((prediction - gt) ** 2)
@@ -47,17 +52,17 @@ class Engine(object):
             if type(prediction) is float:
                 corr = 0.
 
-        return mae, mse, corr
+        return mae, mse, corr, best_exp
 
     def simulate(self, inputs):
         X, y = inputs[:, :self.args.seq_in], inputs[:, -self.args.seq_out:]
 
         all_eqs, all_times, test_scores, test_data = self.model.run(X, y)
-        mae, mse, corr = self.metrics(all_eqs, test_scores, test_data)
+        mae, mse, corr, best_exp = self.metrics(all_eqs, test_scores, test_data)
         if len(self.model.data_buffer) > self.args.train_size:
             loss = self.train()
-            return all_eqs, all_times, test_data, loss.item(), mae, mse, corr
-        return all_eqs, all_times, test_data, 0, mae, mse, corr
+            return best_exp, all_times, test_data, loss.item(), mae, mse, corr
+        return best_exp, all_times, test_data, 0, mae, mse, corr
 
     def train(self):
         self.model.p_v_net_ctx.pv_net.train()

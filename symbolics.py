@@ -106,7 +106,6 @@ rule_map = {
                     ['A->A+A', 'A->A-A', 'A->A*A', 'A->A/A', 'A->A*C',
                      'A->x', 'A->y', 'A->z']),
 
-
     'elec_small': ['A->A+A', 'A->A-A', 'A->A*A', 'A->A/A',
                    'A->x', 'A->cos(A)', 'A->sin(A)', 'A->exp(A)', 'A->A*C',
                    'A->log(A)', 'A->sqrt(A)']
@@ -135,7 +134,6 @@ ntn_map = {
     **dict.fromkeys(balldrop_exp, ['A']),
     **dict.fromkeys(['dp_f1', 'dp_f2'], ['A', 'W', 'T', 'S']),
     **dict.fromkeys(['lorenz_x', 'lorenz_y', 'lorenz_z'], ['A']),
-
 
     'elec_small': ['A']
 }

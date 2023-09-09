@@ -33,7 +33,7 @@ parser.add_argument('--symbolic_lib', type=str, default="elec_small")
 parser.add_argument('--max_len', type=int, default=20)
 parser.add_argument('--max_module_init', type=int, default=10)
 parser.add_argument('--num_transplant', type=int, default=2)
-parser.add_argument('--num_runs', type=int, default=1)
+parser.add_argument('--num_runs', type=int, default=5)
 parser.add_argument('--eta', type=float, default=1)
 parser.add_argument('--num_aug', type=int, default=0)
 parser.add_argument('--exploration_rate', type=float, default=1 / np.sqrt(2))
@@ -97,16 +97,18 @@ def main():
         train_maes, train_mses, train_corrs, test_maes, test_mses, test_corrs = [], [], [], [], [], []
         for iter, (data, _, _, _) in enumerate(train_loader):
             train_data = data[..., args.used_dimension].float()
-            all_eqs, all_times, test_data, loss, mae, mse, corr = engine.simulate(train_data)
+            best_exp, all_times, test_data, loss, mae, mse, corr = engine.simulate(train_data)
             train_maes.append(mae)
             train_mses.append(mse)
             train_corrs.append(corr)
             train_loss += loss
             train_n_samples += 1
 
-
             log = 'Iter: {:03d}, Train Loss: {:.4f}, Train MAE: {:.4f}, Train MSE: {:.4f}, Train CORR: {:.4f}'
             print(log.format(iter, train_loss / train_n_samples, mae, mse, corr), flush=True)
+
+            record_info(str(best_exp), "./records.txt")
+            record_info(str(test_data), "./records.txt")
 
         torch.cuda.empty_cache()
         print("eval...")
@@ -116,6 +118,9 @@ def main():
             test_maes.append(mae)
             test_mses.append(mse)
             test_corrs.append(corr)
+
+            log = 'Iter: {:03d}, Train Loss: {:.4f}, Test MAE: {:.4f}, Test MSE: {:.4f}, Test CORR: {:.4f}'
+            print(log.format(iter, train_loss / train_n_samples, mae, mse, corr), flush=True)
 
         log = 'Epoch: {:03d}, Train Loss: {:.4f}, Test MAE: {:.4f}, Test MSE: {:.4f}, Test CORR: {:.4f}, ' \
               'Training Time: {:.4f}/epoch'
