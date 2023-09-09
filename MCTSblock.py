@@ -414,12 +414,12 @@ class MCTSBlock():
             # scenario 2: if current parent node not fully expanded, follow policy2
             # 如果当前节点还没有被完全扩展（存在未访问的子节点）
             if UC:
-<<<<<<< Updated upstream
+
                 # 按照策略2选择一个动作
 
-=======
+# =======
                 # 按照策略3选择一个动作
->>>>>>> Stashed changes
+# >>>>>>> Stashed changes
                 policy, value = self.get_policy3(nA, UC, seq, state, policy_value_net)
                 action = np.random.choice(np.arange(nA), p=policy)
                 # 执行选定的动作的索引，获得新的状态、非终止节点、奖励、是否完成以及方程

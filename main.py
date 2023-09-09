@@ -7,7 +7,7 @@ import torch
 from data_provider.data_factory import data_provider
 from engine import Engine
 
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(description='PyTorch Time series forecasting')
 
