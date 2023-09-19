@@ -54,6 +54,8 @@ parser.add_argument("--dropout", type=float, default=0.5, help='dropout rate')
 parser.add_argument('--weight_decay', type=float, default=0.0001, help='weight decay rate')
 parser.add_argument("--clip", type=float, default=5., help='gradient clip')
 parser.add_argument("--lr_decay", type=float, default=1)
+parser.add_argument("--rollout_prob_decay", type=float, default=0.99)
+parser.add_argument("--rollout_prob_lower_bound", type=float, default=0.2)
 
 # -- analysis
 parser.add_argument("--recording", action="store_true")
